@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reloj · Hora local</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; background: #080b10; color: #fff; font-family: Arial, Helvetica, sans-serif; }
+  body { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; }
+  main { width: min(94vw, 160vh, 1800px); container-type: inline-size; }
+  .clock { display: flex; align-items: center; justify-content: center; gap: 1.8cqw; }
+  .digit { --h: 31cqw; position: relative; width: 21cqw; height: var(--h); perspective: 1000px; font-size: 28cqw; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .half { position: absolute; left: 0; width: 100%; height: 50%; overflow: hidden; background: #202329; backface-visibility: hidden; }
+  .half span { position: absolute; left: 0; width: 100%; height: var(--h); line-height: var(--h); text-align: center; }
+  .top { top: 0; border-radius: 1.4cqw 1.4cqw 0 0; background: #292d34; }
+  .bottom { bottom: 0; border-radius: 0 0 1.4cqw 1.4cqw; }
+  .bottom span { top: calc(var(--h) / -2); }
+  .digit::after { content: ''; position: absolute; left: 0; right: 0; top: calc(50% - 1px); height: 2px; background: #080b10; z-index: 5; }
+  .fall-top { z-index: 3; transform-origin: bottom; animation: fall-top .28s ease-in forwards; }
+  .fall-bottom { z-index: 4; transform-origin: top; transform: rotateX(90deg); animation: fall-bottom .32s .28s ease-out forwards; }
+  .colon { font-size: 19cqw; font-weight: 700; line-height: 1; padding-bottom: 2cqw; width: 5cqw; text-align: center; }
+  .labels { display: flex; justify-content: space-around; margin-top: 3cqw; color: #c2c9d4; font-size: clamp(12px, 2cqw, 24px); letter-spacing: .18em; }
+  @keyframes fall-top { to { transform: rotateX(-90deg); } }
+  @keyframes fall-bottom { to { transform: rotateX(0); } }
+  button { border: 2px solid #7c8698; border-radius: 8px; padding: 10px 18px; background: #141b27; color: #fff; font: 600 16px Arial, sans-serif; cursor: pointer; min-height: 44px; }
+  button:hover { background: #29374c; }
+  button:focus-visible { outline: 4px solid #ffdf64; outline-offset: 4px; }
+  footer { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .hint { font-size: 14px; color: #c2c9d4; }
+  #status { position: fixed; bottom: 6px; margin: 0; font-size: 14px; text-align: center; }
+  :fullscreen body { padding: 10px; }
+  :fullscreen main { width: min(96vw, 210vh, 2200px); }
+  :fullscreen footer { position: fixed; right: 12px; bottom: 12px; opacity: 0; transition: opacity .2s; }
+  :fullscreen footer:hover, :fullscreen footer:focus-within, :fullscreen body.controls footer { opacity: 1; }
+  :fullscreen .hint { display: none; }
+  @media (prefers-reduced-motion: reduce) { footer { transition: none; } }
+  @media (max-height: 350px) { body { padding: 6px; gap: 4px; } main { width: min(94vw, 150vh); } .hint { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <div id="clock" class="clock" role="img" aria-label="Hora local">
+    <div class="digit" aria-hidden="true"></div>
+    <div class="digit" aria-hidden="true"></div>
+    <div class="colon" aria-hidden="true">:</div>
+    <div class="digit" aria-hidden="true"></div>
+    <div class="digit" aria-hidden="true"></div>
+  </div>
+  <div class="labels" aria-hidden="true"><span>HORAS</span><span>MINUTOS</span></div>
+</main>
+<footer>
+  <button id="fullscreen" type="button">Pantalla completa</button>
+  <span class="hint">Hora local del equipo · Esc para salir</span>
+</footer>
+<p id="status" role="status"></p>
+<script>
+  'use strict';
+  const digits = [...document.querySelectorAll('.digit')];
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function half(position, value, extra = '') {
+    const panel = document.createElement('div');
+    panel.className = `half ${position} ${extra}`;
+    const text = document.createElement('span');
+    text.textContent = value;
+    panel.appendChild(text);
+    return panel;
+  }
+  function setDigit(digit, value, animate) {
+    const old = digit.dataset.value;
+    if (old === value) return;
+    clearTimeout(digit.cleanup);
+    digit.replaceChildren(half('top', value), half('bottom', value));
+    if (animate && old !== undefined && !reducedMotion.matches) {
+      const top = half('top', old, 'fall-top');
+      const bottom = half('bottom', value, 'fall-bottom');
+      // Keep the previous lower half visible until the new panel falls over it.
+      digit.children[1].firstChild.textContent = old;
+      digit.append(top, bottom);
+      digit.cleanup = setTimeout(() => {
+        digit.replaceChildren(half('top', value), half('bottom', value));
+      }, 650);
+    }
+    digit.dataset.value = value;
+  }
+  let previous = '';
+  function update() {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const time = `${hours}:${minutes}`;
+    if (time === previous) return;
+    [...hours + minutes].forEach((value, index) => setDigit(digits[index], value, !!previous && !document.hidden));
+    document.getElementById('clock').setAttribute('aria-label', `Hora local: ${time}`);
+    document.title = `${time} · Reloj flip`;
+    previous = time;
+  }
+  update();
+  setInterval(update, 1000);
+  document.addEventListener('visibilitychange', update);
+  window.addEventListener('focus', update);
+  const button = document.getElementById('fullscreen');
+  button.addEventListener('click', async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else document.getElementById('status').textContent = 'Usa la opción de pantalla completa del navegador (F11 en Windows).';
+    } catch (error) {
+      document.getElementById('status').textContent = 'Usa la opción de pantalla completa del navegador (F11 en Windows).';
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    button.textContent = document.fullscreenElement ? 'Salir de pantalla completa' : 'Pantalla completa';
+    document.getElementById('status').textContent = '';
+  });
+  let controlTimer;
+  function showControls() {
+    document.body.classList.add('controls');
+    clearTimeout(controlTimer);
+    controlTimer = setTimeout(() => document.body.classList.remove('controls'), 2500);
+  }
+  document.addEventListener('pointermove', showControls);
+  document.addEventListener('pointerdown', showControls);
+</script>
+</body>
+</html>
